@@ -2,7 +2,7 @@ package gtach
 
 // ReplayLimit is the maximum number of recent PTY bytes retained when Replay is
 // enabled. Replay is raw output, not a terminal screen snapshot.
-const ReplayLimit = 64 * 1024
+const ReplayLimit = 1024 * 1024
 
 // outputHistory is a bounded ring, guarded by Session.mu. Snapshots own their
 // storage so subsequent output cannot mutate a client's queued replay.

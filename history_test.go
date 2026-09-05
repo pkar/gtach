@@ -6,6 +6,24 @@ import (
 	"testing"
 )
 
+func TestReplayLimit(t *testing.T) {
+	const oneMiB = 1024 * 1024
+	if ReplayLimit != oneMiB {
+		t.Fatalf("replay limit = %d, want %d", ReplayLimit, oneMiB)
+	}
+	var h outputHistory
+	// Fill via normal PTY-sized reads, then wrap and discard only the oldest bytes.
+	chunk := bytes.Repeat([]byte("a"), 4096)
+	for i := 0; i < oneMiB/len(chunk); i++ {
+		h.append(chunk)
+	}
+	h.append([]byte("tail"))
+	want := append(bytes.Repeat([]byte("a"), oneMiB-4), []byte("tail")...)
+	if got := h.snapshot(); !bytes.Equal(got, want) {
+		t.Fatalf("incorrect 1 MiB replay tail (length %d)", len(got))
+	}
+}
+
 func TestOutputHistory(t *testing.T) {
 	var h outputHistory
 	var want []byte
