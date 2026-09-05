@@ -137,8 +137,8 @@ After merging and verifying main, create and push the next semver tag:
 ```sh
 git switch main
 git pull --ff-only
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.0.1
+git push origin v0.0.1
 ```
 
 MIT licensed. dtach remains a separate GPL-licensed project.
