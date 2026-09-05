@@ -1,6 +1,6 @@
 # gtach
 
-Run a command in a persistent PTY, detach, and attach again without stopping it. Pure Go, with a CLI and an importable library. Linux and macOS; no C compiler, cgo, external dtach binary, terminal emulator, or scrollback.
+Run a command in a persistent PTY, detach, and attach again without stopping it. Pure Go, with a CLI and an importable library. Linux and macOS; no C compiler, cgo, external dtach binary, or terminal emulator.
 
 Inspired by [dtach](https://github.com/crigler/dtach) by Ned T. Crigler. This is an independent implementation, not a source translation or a wire-compatible replacement. gtach clients connect only to gtach sessions.
 
@@ -30,6 +30,8 @@ Build locally with `make`, or install with `make install PREFIX="$HOME/.local"`.
 ## CLI
 
 For 0.0.2 (in development), run `gtach` with no arguments in any directory. It starts your `$SHELL` interactively, falling back to `/bin/sh` if `SHELL` is unset or empty. Press Ctrl-\ to detach, then run bare `gtach` from the same directory to resume that shell with its state intact. Use `exit` or Ctrl-D to end the shell; the next invocation starts a new session. Use `gtach --help` for usage.
+
+On attach, CLI sessions replay their last 64 KiB of output so an idle prompt and recent command output are visible without typing. Output produced while detached is included. This is raw output replay, not a reconstructed screen: the retained tail can start mid-line or mid-escape sequence, and full-screen programs may still need a redraw. Replayed terminal controls are interpreted by your terminal just like live output.
 
 Each resolved directory path gets one session per user. Symlink aliases share a session; different directories get separate sessions. Changing directories inside the session does not change its identity, and renaming the original directory gives it a new identity. Automatic sockets live under `/tmp/gtach-<uid>/`, not in the project, in a directory owned by you with mode 0700. Directory paths are hashed to keep socket names short. Existing unsafe directories and stale sockets are refused, not replaced.
 
@@ -114,6 +116,8 @@ func main() {
 
 `Start` runs in the hosting process, not a daemon. Keep that process alive to preserve the session. Use the context or `Session.Close` to terminate it, and `Session.Wait` to get the command's exit error. `Close` is idempotent and returns the same exit error as `Wait`, including an error when it kills the command.
 
+Set `Options.Replay` to retain and replay up to `gtach.ReplayLimit` (64 KiB) of recent output on each connection's first `Attach`. The library default is off, preserving live-only stream behavior. Replay and live output are ordered atomically; repeating `Attach` on one connection does not replay again.
+
 `Client` implements `io.ReadWriteCloser`. `Dial` alone does not subscribe to output; call `Attach` before reading, or just `Write` and `Close` to push input. `Resize(rows, cols)` updates the shared PTY and `Redraw` requests a refresh. Closing a client does not close the session. The Dial context controls connection establishment only; close the client to interrupt later I/O.
 
 ## Boundaries
@@ -122,7 +126,7 @@ The socket's immediate parent must exist, belong to the current uid, and have mo
 
 Existing paths, including stale sockets, are never removed during startup. Confirm a stale session is dead before removing its socket yourself. Normal shutdown removes the socket. Unix socket path-length limits apply.
 
-Output while detached is discarded. `-c` and newly created `-A` sessions preserve initial output until the first client attaches. A library session with `WaitForClient` also waits if the command has already exited; cancel or close it if no client will attach. Slow clients are disconnected when their 256 KiB output queue fills or a write stalls for one second, rather than blocking the command or other clients. Final output drains for up to one second after command exit and queued socket output for up to one more second.
+CLI sessions retain the last 64 KiB of output in server memory, including output while detached; older bytes are discarded. Library sessions discard detached output unless `Options.Replay` is enabled. Nothing is logged to disk. Upgrading the client does not upgrade an already-running server: sessions created before replay support stay live-only until you finish their commands and start new sessions. `-c` and newly created `-A` sessions preserve initial output until the first client attaches. A library session with `WaitForClient` also waits if the command has already exited; cancel or close it if no client will attach. Slow clients are disconnected when their output queue (up to 256 KiB of live output plus a 64 KiB replay snapshot) fills or a write stalls for one second, rather than blocking the command or other clients. Final output drains for up to one second after command exit and queued socket output for up to one more second.
 
 There is no dtach socket interoperability, socket executable-bit status indicator, automatic stale-socket deletion, long-path workaround, or terminal-state replay. Redraw is selected per client. Terminating the server kills the command's original process group and closes the PTY; commands that deliberately escape into separate sessions are not supervised.
 

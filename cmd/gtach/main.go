@@ -178,7 +178,7 @@ func options(c config) gtach.Options {
 	if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil {
 		rows, cols = uint16(h), uint16(w)
 	}
-	return gtach.Options{Socket: c.Socket, Command: c.Command, Rows: rows, Cols: cols, WaitForClient: c.Mode == "-c" || c.Mode == "-A"}
+	return gtach.Options{Socket: c.Socket, Command: c.Command, Rows: rows, Cols: cols, WaitForClient: c.Mode == "-c" || c.Mode == "-A", Replay: true}
 }
 
 func run(c config) error {

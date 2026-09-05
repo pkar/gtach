@@ -193,6 +193,8 @@ func TestCLI(t *testing.T) {
 	workingDir = alias
 	extraEnv[0] = "SHELL=/no/such/shell" // Reattach must not start another shell.
 	cmd, f = start()
+	// Reattach must show prior output before the user types anything.
+	read(f, "STATE:kept")
 	f.Write([]byte("printf 'RESUMED:%s\\n' \"$GTACH_TEST_STATE\"\n"))
 	read(f, "RESUMED:kept")
 	f.Write([]byte("exit\n"))

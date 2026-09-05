@@ -35,7 +35,8 @@ func (c *Client) send(kind byte, b []byte) error {
 	return writeMessage(c.conn, kind, b)
 }
 
-// Attach subscribes to future output; there is no scrollback or terminal emulator.
+// Attach subscribes to output, preceded by recent output if the session has
+// Replay enabled. Repeating Attach on the same connection does not replay again.
 func (c *Client) Attach() error { return c.send(attachMessage, nil) }
 
 func (c *Client) Write(b []byte) (int, error) {

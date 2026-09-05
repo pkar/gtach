@@ -34,6 +34,9 @@ type Options struct {
 	// WaitForClient preserves initial output until the first Attach. Cancel the
 	// context or call Close if no client will attach.
 	WaitForClient bool
+	// Replay retains the last ReplayLimit bytes of output, including output while
+	// detached, and sends them once on each connection's first Attach. Off by default.
+	Replay bool
 }
 
 // Session owns a command, its PTY, and its socket. It remains alive when clients
@@ -54,6 +57,7 @@ type Session struct {
 	workers   sync.WaitGroup
 	inputMu   sync.Mutex
 	exited    atomic.Bool
+	history   *outputHistory
 }
 
 type peer struct {
@@ -125,6 +129,9 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 	terminal = os.NewFile(uintptr(fd), "pty")
 	s := &Session{cmd: cmd, terminal: terminal, listener: listener,
 		clients: make(map[*peer]bool), first: make(chan struct{}), stop: make(chan struct{}), done: make(chan struct{})}
+	if opts.Replay {
+		s.history = &outputHistory{}
+	}
 	if !opts.WaitForClient {
 		s.firstOnce.Do(func() { close(s.first) })
 	}
@@ -229,6 +236,9 @@ func (s *Session) broadcast(b []byte) {
 	if s.closing {
 		return
 	}
+	if s.history != nil {
+		s.history.append(b)
+	}
 	for p, attached := range s.clients {
 		if attached {
 			select {
@@ -305,7 +315,18 @@ func (s *Session) handle(p *peer) {
 				return
 			}
 			s.mu.Lock()
-			s.clients[p] = true
+			if s.closing {
+				s.mu.Unlock()
+				return
+			}
+			if !s.clients[p] {
+				// Queue replay and subscribe under the broadcast lock so live output
+				// follows the snapshot without a gap or duplicate bytes.
+				if s.history != nil && len(s.history.data) > 0 {
+					p.output <- s.history.snapshot() // An unattached peer has an empty queue.
+				}
+				s.clients[p] = true
+			}
 			s.mu.Unlock()
 			s.firstOnce.Do(func() { close(s.first) })
 		case inputMessage:
