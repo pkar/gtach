@@ -17,7 +17,7 @@ func defaultConfig() (config, error) {
 	if err != nil {
 		return config{}, err
 	}
-	return directoryConfig(dir, os.Getenv("SHELL"), defaultSocketDir())
+	return directoryConfig(dir, currentShell(), defaultSocketDir())
 }
 
 func defaultSocketDir() string {

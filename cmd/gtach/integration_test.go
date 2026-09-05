@@ -41,10 +41,11 @@ func TestCLI(t *testing.T) {
 	})
 
 	var workingDir string
+	var program = binary
 	var extraEnv []string
 	start := func(args ...string) (*exec.Cmd, *os.File) {
 		t.Helper()
-		cmd := exec.Command(binary, args...)
+		cmd := exec.Command(program, args...)
 		cmd.Dir = workingDir
 		cmd.Env = append(os.Environ(), extraEnv...)
 		f, err := pty.Start(cmd)
@@ -229,6 +230,39 @@ func TestCLI(t *testing.T) {
 	}
 	if b, err := exec.Command(binary, "--help").CombinedOutput(); err != nil || !strings.Contains(string(b), "start or resume") {
 		t.Fatalf("help: %v %s", err, b)
+	}
+
+	// Invoke from a real interactive Bash with a prompt configured in .bashrc.
+	// PS1 is deliberately not exported; the inner shell must load its own rc.
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(dir, "home")
+	if err := os.Mkdir(home, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".bashrc"), []byte("PS1='PARENT-PROMPT> '; export FROM_RC=loaded\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	program = bash
+	workingDir = project
+	extraEnv = []string{"HOME=" + home, "ENV=", "BASH_ENV="}
+	for _, setting := range []string{"unset SHELL", "export SHELL=/bin/sh"} {
+		outer, terminal := start("--noprofile", "-i")
+		read(terminal, "PARENT-PROMPT> ")
+		terminal.Write([]byte(setting + "; export -n PS1; " + binary + "; printf 'OUTER-%s\\n' returned\n"))
+		read(terminal, "PARENT-PROMPT> ")
+		terminal.Write([]byte("[ -n \"$BASH_VERSION\" ] && printf 'BASH-%s\\n' \"$FROM_RC\"\n"))
+		read(terminal, "BASH-loaded")
+		terminal.Write([]byte{28})
+		read(terminal, "OUTER-returned")
+		terminal.Write([]byte(binary + "; printf 'OUTER-%s\\n' returned\n"))
+		read(terminal, "BASH-loaded") // Replay confirms the same Bash session resumed.
+		terminal.Write([]byte("exit\n"))
+		read(terminal, "OUTER-returned")
+		terminal.Write([]byte("exit\n"))
+		wait(outer)
 	}
 
 	foreground := exec.Command(binary, "-N", filepath.Join(dir, "foreground"), "sleep", "60")
