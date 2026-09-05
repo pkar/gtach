@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -94,10 +93,7 @@ func TestCLI(t *testing.T) {
 				t.Fatal(err)
 			}
 		case <-time.After(5 * time.Second):
-			state, _ := exec.Command("ps", "-o", "pid,ppid,pgid,stat,comm", "-p", fmt.Sprint(cmd.Process.Pid)).CombinedOutput()
-			t.Logf("process before timeout cleanup: %s", state)
-			t.Logf("kill result: %v", cmd.Process.Kill())
-			_ = syscall.Kill(cmd.Process.Pid, syscall.SIGKILL)
+			cmd.Process.Kill()
 			<-done
 			t.Fatal("CLI did not exit")
 		}
@@ -265,9 +261,14 @@ func TestCLI(t *testing.T) {
 		read(terminal, "BASH-loaded") // Replay confirms the same Bash session resumed.
 		terminal.Write([]byte("exit\n"))
 		read(terminal, "OUTER-returned")
-		// End the harness shell without platform-specific interactive exit hooks.
-		terminal.Write([]byte("exec /usr/bin/true\n"))
+		terminal.Write([]byte("exit\n"))
+		// Darwin waits for terminal output to drain when the session leader exits.
+		// Keep reading the final echo/prompt while waiting, like a real terminal.
+		drained := make(chan struct{})
+		go func() { io.Copy(io.Discard, terminal); close(drained) }()
 		wait(outer)
+		terminal.Close()
+		<-drained
 	}
 
 	foreground := exec.Command(binary, "-N", filepath.Join(dir, "foreground"), "sleep", "60")
