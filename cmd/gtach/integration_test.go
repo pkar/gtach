@@ -40,9 +40,13 @@ func TestCLI(t *testing.T) {
 		}
 	})
 
+	var workingDir string
+	var extraEnv []string
 	start := func(args ...string) (*exec.Cmd, *os.File) {
 		t.Helper()
 		cmd := exec.Command(binary, args...)
+		cmd.Dir = workingDir
+		cmd.Env = append(os.Environ(), extraEnv...)
 		f, err := pty.Start(cmd)
 		if err != nil {
 			t.Fatal(err)
@@ -144,6 +148,75 @@ func TestCLI(t *testing.T) {
 	if b, err := exec.Command(binary, "-n", filepath.Join(dir, "fail"), "/no/such/command").CombinedOutput(); err == nil || !strings.Contains(string(b), "no such file") {
 		t.Fatalf("exec error: %v %s", err, b)
 	}
+	// Bare invocation preserves shell state and keys sessions by the invoking
+	// directory, even when the shell changes its own working directory.
+	project := filepath.Join(dir, "project")
+	other := filepath.Join(dir, "other")
+	alias := filepath.Join(dir, "alias")
+	for _, path := range []string{project, other} {
+		if err := os.Mkdir(path, 0700); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := directoryConfig(path, "", defaultSocketDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			c, err := gtach.Dial(context.Background(), cfg.Socket)
+			if err == nil {
+				c.Attach()
+				c.Write([]byte("exit\n"))
+				c.Close()
+			}
+		})
+	}
+	if err := os.Symlink(project, alias); err != nil {
+		t.Fatal(err)
+	}
+	workingDir = project
+	extraEnv = []string{"SHELL=/bin/sh", "PS1=GTACH-PROMPT>", "ENV=", "GTACH_TEST_STATE="}
+	cmd, f = start()
+	read(f, "GTACH-PROMPT>")
+	f.Write([]byte("GTACH_TEST_STATE=kept; cd /; printf 'STATE:%s\\n' \"$GTACH_TEST_STATE\"\n"))
+	read(f, "STATE:kept")
+	f.Write([]byte{28})
+	wait(cmd)
+
+	workingDir = other
+	cmd, f = start()
+	read(f, "GTACH-PROMPT>")
+	f.Write([]byte("printf 'OTHER:%s\\n' \"${GTACH_TEST_STATE:-empty}\"\n"))
+	read(f, "OTHER:empty")
+	f.Write([]byte("exit\n"))
+	wait(cmd)
+
+	workingDir = alias
+	extraEnv[0] = "SHELL=/no/such/shell" // Reattach must not start another shell.
+	cmd, f = start()
+	f.Write([]byte("printf 'RESUMED:%s\\n' \"$GTACH_TEST_STATE\"\n"))
+	read(f, "RESUMED:kept")
+	f.Write([]byte("exit\n"))
+	wait(cmd)
+
+	workingDir = project
+	extraEnv[0] = "SHELL=" // Normal exit allows a fresh session, with /bin/sh fallback.
+	cmd, f = start()
+	read(f, "GTACH-PROMPT>")
+	f.Write([]byte("printf 'FRESH:%s\\n' \"${GTACH_TEST_STATE:-empty}\"\n"))
+	read(f, "FRESH:empty")
+	f.Write([]byte("exit\n"))
+	wait(cmd)
+	entries, err := os.ReadDir(project)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("generated project files: %v %v", entries, err)
+	}
+	if b, err := exec.Command(binary).CombinedOutput(); err == nil || !strings.Contains(string(b), "requires a terminal") {
+		t.Fatalf("bare non-TTY: %v %s", err, b)
+	}
+	if b, err := exec.Command(binary, "--help").CombinedOutput(); err != nil || !strings.Contains(string(b), "start or resume") {
+		t.Fatalf("help: %v %s", err, b)
+	}
+
 	foreground := exec.Command(binary, "-N", filepath.Join(dir, "foreground"), "sleep", "60")
 	foreground.Stdout, foreground.Stderr = io.Discard, io.Discard
 	if err := foreground.Start(); err != nil {

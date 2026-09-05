@@ -16,7 +16,7 @@ Install with Go 1.25 or newer:
 go install github.com/pkar/gtach/cmd/gtach@latest
 ```
 
-Once a release is published, download a binary from [releases](https://github.com/pkar/gtach/releases), or inspect and run the installer:
+Download a binary from [releases](https://github.com/pkar/gtach/releases), or inspect and run the installer:
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/pkar/gtach/main/install.sh
@@ -29,7 +29,11 @@ Build locally with `make`, or install with `make install PREFIX="$HOME/.local"`.
 
 ## CLI
 
-Create a private socket directory and start a shell:
+For 0.0.2 (in development), run `gtach` with no arguments in any directory. It starts your `$SHELL` interactively, falling back to `/bin/sh` if `SHELL` is unset or empty. Press Ctrl-\ to detach, then run bare `gtach` from the same directory to resume that shell with its state intact. Use `exit` or Ctrl-D to end the shell; the next invocation starts a new session. Use `gtach --help` for usage.
+
+Each resolved directory path gets one session per user. Symlink aliases share a session; different directories get separate sessions. Changing directories inside the session does not change its identity, and renaming the original directory gives it a new identity. Automatic sockets live under `/tmp/gtach-<uid>/`, not in the project, in a directory owned by you with mode 0700. Directory paths are hashed to keep socket names short. Existing unsafe directories and stale sockets are refused, not replaced.
+
+For explicit session names, create a private socket directory and start a shell:
 
 ```sh
 mkdir -p "$HOME/.gtach"
@@ -41,6 +45,7 @@ Press Ctrl-\ to detach. Reattach with `gtach -a "$HOME/.gtach/shell"`. Multiple 
 
 | Mode | Behavior |
 | --- | --- |
+| no arguments | Start or resume the current directory's shell (0.0.2) |
 | `-a SOCKET` | Attach to an existing session |
 | `-A SOCKET [COMMAND ...]` | Attach, or create and attach if absent |
 | `-c SOCKET COMMAND ...` | Create and attach; fail if the path exists |
@@ -48,7 +53,7 @@ Press Ctrl-\ to detach. Reattach with `gtach -a "$HOME/.gtach/shell"`. Multiple 
 | `-N SOCKET COMMAND ...` | Create detached with the server in the foreground |
 | `-p SOCKET` | Copy stdin verbatim to the command |
 
-Place options after the socket and before the command. Use `--` to end options. Arguments after the command are passed through unchanged; no shell is inserted.
+For explicit modes, place options after the socket and before the command. Use `--` to end options. Arguments after the command are passed through unchanged; no shell is inserted.
 
 | Option | Behavior |
 | --- | --- |
@@ -59,6 +64,7 @@ Place options after the socket and before the command. Use `--` to end options. 
 | `-r ctrl_l` | Send Ctrl-L only in noncanonical, no-echo mode; default |
 | `-r winch` | Signal the PTY foreground process group with SIGWINCH |
 | `--version` | Print the binary version; use without a mode |
+| `--help`, `-h` | Print usage without starting a session |
 
 By default Ctrl-Z suspends the client and restores the local terminal. Resume it with your shell's `fg`. Ctrl-C is forwarded to the PTY. Closing the client or losing its terminal leaves the command running. Exit the command normally to end the session; send SIGTERM to a foreground `-N` server to terminate it.
 
@@ -137,8 +143,8 @@ After merging and verifying main, create and push the next semver tag:
 ```sh
 git switch main
 git pull --ff-only
-git tag v0.0.1
-git push origin v0.0.1
+git tag v0.0.2
+git push origin v0.0.2
 ```
 
 MIT licensed. dtach remains a separate GPL-licensed project.

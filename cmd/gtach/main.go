@@ -25,7 +25,11 @@ import (
 var version = "dev"
 
 const usage = `gtach: persistent PTY sessions
-Usage: gtach MODE SOCKET [OPTIONS] [--] [COMMAND [ARG...]]
+Usage: gtach
+       gtach MODE SOCKET [OPTIONS] [--] [COMMAND [ARG...]]
+With no arguments, start or resume a shell in the current directory.
+Press Ctrl-\ to detach without stopping the shell.
+Explicit modes:
   -a  attach to an existing session
   -A  attach, or create and attach if absent
   -c  create and attach (fail if socket exists)
@@ -38,7 +42,8 @@ Options:
   -z         pass Ctrl-Z through instead of suspending the client
   -r METHOD  redraw: none, ctrl_l (default), winch
   --version  print version
-Create the socket directory with mode 0700 before starting a session.
+For explicit modes, create the socket directory with mode 0700 first.
+Bare gtach manages its own private socket directory.
 `
 
 type config struct {
@@ -144,11 +149,21 @@ func main() {
 		fmt.Println(version)
 		return
 	}
-	if len(os.Args) == 1 || (len(os.Args) == 2 && (os.Args[1] == "--help" || os.Args[1] == "-h")) {
+	if len(os.Args) == 2 && (os.Args[1] == "--help" || os.Args[1] == "-h") {
 		fmt.Print(usage)
 		return
 	}
-	c, err := parse(os.Args[1:])
+	var c config
+	var err error
+	if len(os.Args) == 1 {
+		if !term.IsTerminal(int(os.Stdin.Fd())) {
+			err = errors.New("attach requires a terminal on stdin (use --help for usage)")
+		} else {
+			c, err = defaultConfig()
+		}
+	} else {
+		c, err = parse(os.Args[1:])
+	}
 	if err == nil {
 		err = run(c)
 	}
