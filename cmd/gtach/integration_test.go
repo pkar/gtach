@@ -70,7 +70,7 @@ func TestCLI(t *testing.T) {
 		})
 		return cmd, f
 	}
-	read := func(f *os.File, marker string) {
+	read := func(f *os.File, marker string) string {
 		t.Helper()
 		f.SetReadDeadline(time.Now().Add(5 * time.Second))
 		var output strings.Builder
@@ -82,6 +82,7 @@ func TestCLI(t *testing.T) {
 				t.Fatalf("waiting for %q: %q: %v", marker, output.String(), err)
 			}
 		}
+		return output.String()
 	}
 	wait := func(cmd *exec.Cmd) {
 		t.Helper()
@@ -247,18 +248,25 @@ func TestCLI(t *testing.T) {
 	}
 	program = bash
 	workingDir = project
-	extraEnv = []string{"HOME=" + home, "ENV=", "BASH_ENV="}
+	extraEnv = []string{"HOME=" + home, "ENV=", "BASH_ENV=", "TERM=xterm"}
 	for _, setting := range []string{"unset SHELL", "export SHELL=/bin/sh"} {
 		outer, terminal := start("--noprofile", "-i")
 		read(terminal, "PARENT-PROMPT> ")
 		terminal.Write([]byte(setting + "; export -n PS1; " + binary + "; printf 'OUTER-%s\\n' returned\n"))
-		read(terminal, "PARENT-PROMPT> ")
+		read(terminal, "[g] PARENT-PROMPT> ")
 		terminal.Write([]byte("[ -n \"$BASH_VERSION\" ] && printf 'BASH-%s\\n' \"$FROM_RC\"\n"))
 		read(terminal, "BASH-loaded")
 		terminal.Write([]byte{28})
 		read(terminal, "OUTER-returned")
 		terminal.Write([]byte(binary + "; printf 'OUTER-%s\\n' returned\n"))
-		read(terminal, "BASH-loaded") // Replay confirms the same Bash session resumed.
+		replayed := read(terminal, "BASH-loaded") // Replay confirms the same Bash session resumed.
+		terminal.Write([]byte("printf 'AFTER-%s\\n' reattach\n"))
+		replayed += read(terminal, "AFTER-reattach")
+		for _, clear := range []string{"\x1b[2J", "\x1b[3J", "\x1b[H\x1b[J"} {
+			if strings.Contains(replayed, clear) {
+				t.Fatalf("reattach cleared the screen: %q", replayed)
+			}
+		}
 		terminal.Write([]byte("exit\n"))
 		read(terminal, "OUTER-returned")
 		terminal.Write([]byte("exit\n"))

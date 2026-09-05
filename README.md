@@ -29,9 +29,11 @@ Build locally with `make`, or install with `make install PREFIX="$HOME/.local"`.
 
 ## CLI
 
-For 0.0.2 (in development), run `gtach` with no arguments in any directory. It detects the invoking shell and starts that shell interactively, so its normal startup files configure the prompt. If the parent is not a recognized shell or cannot be inspected, it uses exported `$SHELL`, then `/bin/sh` as a last resort. This also handles Bash with an unexported `SHELL` or a `SHELL` value that names a different login shell. Press Ctrl-\ to detach, then run bare `gtach` from the same directory to resume that shell with its state intact. Use `exit` or Ctrl-D to end the shell; the next invocation starts a new session. Use `gtach --help` for usage.
+Run `gtach` with no arguments in any directory. It detects the invoking shell and starts that shell interactively, so its normal startup files configure the prompt. If the parent is not a recognized shell or cannot be inspected, it uses exported `$SHELL`, then `/bin/sh` as a last resort. This also handles Bash with an unexported `SHELL` or a `SHELL` value that names a different login shell. Press Ctrl-\ to detach, then run bare `gtach` from the same directory to resume that shell with its state intact. Use `exit` or Ctrl-D to end the shell; the next invocation starts a new session. Use `gtach --help` for usage.
 
-On attach, CLI sessions replay their last 1 MiB of output so an idle prompt and recent command output are visible without typing. Output produced while detached is included. This is raw output replay, not a reconstructed screen: the retained tail can start mid-line or mid-escape sequence, and full-screen programs may still need a redraw. Replayed terminal controls are interpreted by your terminal just like live output.
+New automatic Bash, Zsh, Fish, and POSIX-style shell sessions prefix the prompt with `[g] ` while retaining the user's normal prompt configuration. Bash and Zsh prompt hooks run first, so themes that update the prompt each command keep working. CLI commands also receive `GTACH=1` for custom prompt themes and other session-aware tools. Explicitly launched commands and other shells receive the environment marker but are not wrapped. Startup scripts are kept in the private socket directory, not in your dotfiles, and contain no copied environment values. Existing sessions keep their original prompt until restarted.
+
+On attach, CLI sessions replay their last 1 MiB of output so an idle prompt and recent command output are visible without typing. No extra redraw is sent by default: sending Ctrl-L after replay would clear the shell's restored output. Use `-r ctrl_l` or `-r winch` explicitly when an application needs a redraw. Output produced while detached is included. This is raw output replay, not a reconstructed screen: the retained tail can start mid-line or mid-escape sequence, and full-screen programs may still need a redraw. Replayed terminal controls are interpreted by your terminal just like live output.
 
 New sessions inherit the caller's exported environment, including `PATH`, and start in the caller's current directory. The interactive shell can still change its environment through startup files. Reattaching preserves the running shell's environment rather than replacing it with the attaching terminal's environment. Aliases and unexported shell variables are not inherited. Configure your prompt in the shell's normal startup file (for example `.bashrc` or `.zshrc`); ad hoc, unexported prompt changes in the outer shell cannot be copied. Existing `/bin/sh` sessions stay `/bin/sh`: exit one normally and run bare `gtach` again to use the detected shell.
 
@@ -51,7 +53,7 @@ Press Ctrl-\ to detach. Reattach with `gtach -a "$HOME/.gtach/shell"`. Multiple 
 
 | Mode | Behavior |
 | --- | --- |
-| no arguments | Start or resume the current directory's shell (0.0.2) |
+| no arguments | Start or resume the current directory's shell |
 | `-a SOCKET` | Attach to an existing session |
 | `-A SOCKET [COMMAND ...]` | Attach, or create and attach if absent |
 | `-c SOCKET COMMAND ...` | Create and attach; fail if the path exists |
@@ -66,8 +68,8 @@ For explicit modes, place options after the socket and before the command. Use `
 | `-e '^A'` | Change the detach key; default is `'^\'` |
 | `-E` | Disable detach-key processing |
 | `-z` | Send Ctrl-Z to the command instead of suspending the client |
-| `-r none` | Do not request a redraw |
-| `-r ctrl_l` | Send Ctrl-L only in noncanonical, no-echo mode; default |
+| `-r none` | Do not request a redraw; default |
+| `-r ctrl_l` | Send Ctrl-L only in noncanonical, no-echo mode |
 | `-r winch` | Signal the PTY foreground process group with SIGWINCH |
 | `--version` | Print the binary version; use without a mode |
 | `--help`, `-h` | Print usage without starting a session |

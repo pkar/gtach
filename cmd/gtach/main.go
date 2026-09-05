@@ -41,7 +41,7 @@ Options:
   -e CHAR    detach key (default ^\; literal byte or ^X)
   -E         disable detach key
   -z         pass Ctrl-Z through instead of suspending the client
-  -r METHOD  redraw: none, ctrl_l (default), winch
+  -r METHOD  redraw: none (default), ctrl_l, winch
   --version  print version
   --list     list automatic sessions (alias for list; optional SOCKET_DIR)
 For explicit modes, create the socket directory with mode 0700 first.
@@ -51,13 +51,14 @@ Bare gtach manages its own private socket directory.
 type config struct {
 	Mode, Socket        string
 	Command             []string
+	Env                 []string
 	Escape              byte
 	NoEscape, NoSuspend bool
 	Redraw              gtach.Redraw
 }
 
 func parse(args []string) (config, error) {
-	c := config{Escape: 28, Redraw: gtach.RedrawCtrlL}
+	c := config{Escape: 28, Redraw: gtach.RedrawNone}
 	if len(args) < 2 {
 		return c, errors.New("mode and socket are required")
 	}
@@ -197,7 +198,7 @@ func options(c config) gtach.Options {
 	if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil {
 		rows, cols = uint16(h), uint16(w)
 	}
-	return gtach.Options{Socket: c.Socket, Command: c.Command, Env: os.Environ(), Rows: rows, Cols: cols, WaitForClient: c.Mode == "-c" || c.Mode == "-A", Replay: true}
+	return gtach.Options{Socket: c.Socket, Command: c.Command, Env: environment(append(c.Env, "GTACH=1")...), Rows: rows, Cols: cols, WaitForClient: c.Mode == "-c" || c.Mode == "-A", Replay: true}
 }
 
 func run(c config) error {

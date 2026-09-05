@@ -55,8 +55,8 @@ func directoryConfig(dir, shell, socketDir string) (config, error) {
 	if err := saveSessionDirectory(socket, dir); err != nil {
 		return config{}, err
 	}
-	return config{
+	return preparePrompt(config{
 		Mode: "-A", Socket: socket,
-		Command: []string{shell, "-i"}, Escape: 28, Redraw: gtach.RedrawCtrlL,
-	}, nil
+		Command: []string{shell, "-i"}, Escape: 28, Redraw: gtach.RedrawNone,
+	})
 }
