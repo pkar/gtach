@@ -174,9 +174,18 @@ func TestCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	workingDir = project
-	extraEnv = []string{"SHELL=/bin/sh", "PS1=GTACH-PROMPT>", "ENV=", "GTACH_TEST_STATE="}
+	extraEnv = []string{"SHELL=/bin/sh", "PS1=GTACH-PROMPT>", "ENV=", "GTACH_TEST_STATE=", "GTACH_INHERIT_TEST=from caller"}
 	cmd, f = start()
 	read(f, "GTACH-PROMPT>")
+	f.Write([]byte("printf 'ENV:%s\\n' \"$GTACH_INHERIT_TEST\"\n"))
+	read(f, "ENV:from caller")
+	for _, flag := range []string{"list", "--list"} {
+		output, err := exec.Command(binary, flag).CombinedOutput()
+		resolved, resolveErr := filepath.EvalSymlinks(project)
+		if err != nil || resolveErr != nil || !strings.Contains(string(output), resolved) || !strings.Contains(string(output), "active") {
+			t.Fatalf("list: %v %s", err, output)
+		}
+	}
 	f.Write([]byte("GTACH_TEST_STATE=kept; cd /; printf 'STATE:%s\\n' \"$GTACH_TEST_STATE\"\n"))
 	read(f, "STATE:kept")
 	f.Write([]byte{28})
@@ -192,11 +201,14 @@ func TestCLI(t *testing.T) {
 
 	workingDir = alias
 	extraEnv[0] = "SHELL=/no/such/shell" // Reattach must not start another shell.
+	extraEnv[4] = "GTACH_INHERIT_TEST=changed caller"
 	cmd, f = start()
 	// Reattach must show prior output before the user types anything.
 	read(f, "STATE:kept")
 	f.Write([]byte("printf 'RESUMED:%s\\n' \"$GTACH_TEST_STATE\"\n"))
 	read(f, "RESUMED:kept")
+	f.Write([]byte("printf 'KEPT_ENV:%s\\n' \"$GTACH_INHERIT_TEST\"\n"))
+	read(f, "KEPT_ENV:from caller")
 	f.Write([]byte("exit\n"))
 	wait(cmd)
 

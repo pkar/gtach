@@ -51,8 +51,12 @@ func directoryConfig(dir, shell, socketDir string) (config, error) {
 	if shell == "" {
 		shell = "/bin/sh"
 	}
+	socket := filepath.Join(socketDir, fmt.Sprintf("%x", sha256.Sum256([]byte(dir))))
+	if err := saveSessionDirectory(socket, dir); err != nil {
+		return config{}, err
+	}
 	return config{
-		Mode: "-A", Socket: filepath.Join(socketDir, fmt.Sprintf("%x", sha256.Sum256([]byte(dir)))),
+		Mode: "-A", Socket: socket,
 		Command: []string{shell, "-i"}, Escape: 28, Redraw: gtach.RedrawCtrlL,
 	}, nil
 }

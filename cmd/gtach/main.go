@@ -27,6 +27,7 @@ var version = "dev"
 const usage = `gtach: persistent PTY sessions
 Usage: gtach
        gtach MODE SOCKET [OPTIONS] [--] [COMMAND [ARG...]]
+       gtach list [SOCKET_DIR]
 With no arguments, start or resume a shell in the current directory.
 Press Ctrl-\ to detach without stopping the shell.
 Explicit modes:
@@ -42,6 +43,7 @@ Options:
   -z         pass Ctrl-Z through instead of suspending the client
   -r METHOD  redraw: none, ctrl_l (default), winch
   --version  print version
+  --list     list automatic sessions (alias for list; optional SOCKET_DIR)
 For explicit modes, create the socket directory with mode 0700 first.
 Bare gtach manages its own private socket directory.
 `
@@ -153,6 +155,23 @@ func main() {
 		fmt.Print(usage)
 		return
 	}
+	if len(os.Args) >= 2 && (os.Args[1] == "list" || os.Args[1] == "--list") {
+		dir := defaultSocketDir()
+		var err error
+		if len(os.Args) > 3 {
+			err = errors.New("usage: gtach list [SOCKET_DIR]")
+		} else {
+			if len(os.Args) == 3 {
+				dir = os.Args[2]
+			}
+			err = listSessions(os.Stdout, dir)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "gtach:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	var c config
 	var err error
 	if len(os.Args) == 1 {
@@ -178,7 +197,7 @@ func options(c config) gtach.Options {
 	if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil {
 		rows, cols = uint16(h), uint16(w)
 	}
-	return gtach.Options{Socket: c.Socket, Command: c.Command, Rows: rows, Cols: cols, WaitForClient: c.Mode == "-c" || c.Mode == "-A", Replay: true}
+	return gtach.Options{Socket: c.Socket, Command: c.Command, Env: os.Environ(), Rows: rows, Cols: cols, WaitForClient: c.Mode == "-c" || c.Mode == "-A", Replay: true}
 }
 
 func run(c config) error {
