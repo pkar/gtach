@@ -22,7 +22,8 @@ func TestPromptShells(t *testing.T) {
 			if err != nil {
 				t.Skip(shell + " not installed")
 			}
-			dir, err := os.MkdirTemp("", "gt-prompt-")
+			// Leave room for the 64-byte session hash under macOS's socket limit.
+			dir, err := os.MkdirTemp("/tmp", "gt-prompt-")
 			if err != nil {
 				t.Fatal(err)
 			}
